@@ -23,6 +23,7 @@ from functools import wraps
 from glob import glob1
 from os import remove, walk
 from os.path import exists, isdir, join
+from pathlib import Path
 from subprocess import Popen, PIPE
 from shutil import rmtree, copyfile, copytree
 from dhpython.exceptions import RequiredCommandMissingException
@@ -47,7 +48,7 @@ def copy_test_files(dest='{build_dir}',
 
         @wraps(func)
         def __copy_test_files(self, context, args, *oargs, **kwargs):
-            files_to_copy = {'test', 'tests'}
+            files_to_copy = {'pyproject.toml', 'pytest.ini', 'test', 'tests'}
             # check debian/pybuild_pythonX.Y.testfiles
             for tpl in ('_{i}{v}', '_{i}{m}', ''):
                 tpl = tpl.format(i=args['interpreter'].name,
@@ -67,6 +68,7 @@ def copy_test_files(dest='{build_dir}',
                 dst_dpath = join(dest.format(**args), name.rsplit('/', 1)[-1])
                 if exists(src_dpath):
                     if not exists(dst_dpath):
+                        log.debug("Copying %s to %s for tests", src_dpath, dst_dpath)
                         if isdir(src_dpath):
                             copytree(src_dpath, dst_dpath)
                         else:
@@ -219,16 +221,49 @@ class Base:
         elif self.cfg.test_pytest:
             return 'cd {build_dir}; {interpreter} -m pytest {args}'
         elif self.cfg.test_tox:
-            # tox will call pip to install the module. Let it install the
-            # module inside the virtualenv
-            pydistutils_cfg = join(args['home_dir'], '.pydistutils.cfg')
-            if exists(pydistutils_cfg):
-                remove(pydistutils_cfg)
-            return 'cd {build_dir}; tox -c {dir}/tox.ini --sitepackages -e py{version.major}{version.minor} {args}'
+            # --installpkg was added in tox 4. Keep tox 3 support for now,
+            # for backportability
+            r = execute(['tox', '--version', '--quiet'], shell=False)
+            major_version = int(r['stdout'].split('.', 1)[0])
+            if major_version < 4:
+                # tox will call pip to install the module. Let it install the
+                # module inside the virtualenv
+                pydistutils_cfg = join(args['home_dir'], '.pydistutils.cfg')
+                if exists(pydistutils_cfg):
+                    remove(pydistutils_cfg)
+                return 'cd {build_dir}; tox -c {dir}/tox.ini --sitepackages -e py{version.major}{version.minor} {args}'
+
+            wheel = self.built_wheel(context, args)
+            if not wheel:
+                self.build_wheel(context, args)
+                wheel = self.built_wheel(context, args)
+            args['wheel'] = wheel
+
+            if exists(join(args['dir'], 'tox.ini')):
+                return 'cd {build_dir}; tox -c {dir}/tox.ini --sitepackages --installpkg {wheel} -e py{version.major}{version.minor} {args}'
+            elif exists(join(args['dir'], 'pyproject.toml')):
+                return 'cd {build_dir}; tox -c {dir}/pyproject.toml --sitepackages --installpkg {wheel} -e py{version.major}{version.minor} {args}'
+            elif exists(join(args['dir'], 'setup.cfg')):
+                return 'cd {build_dir}; tox -c {dir}/setup.cfg --sitepackages --installpkg {wheel} -e py{version.major}{version.minor} {args}'
+            else:
+                raise Exception("tox config not found. Expected to find tox.ini, pyproject.toml, or setup.cfg")
         elif self.cfg.test_custom:
             return 'cd {build_dir}; {args}'
         elif args['version'] == '2.7' or args['version'] >> '3.1' or args['interpreter'] == 'pypy':
             return 'cd {build_dir}; {interpreter} -m unittest discover -v {args}'
+
+    def build_wheel(self, context, args):
+        raise NotImplementedError("build_wheel method not implemented in %s" % self.NAME)
+
+    def built_wheel(self, context, args):
+        """Return the path to any built wheels we can find"""
+        wheels = list(Path(args['home_dir']).glob('*.whl'))
+        n_wheels = len(wheels)
+        if n_wheels > 1:
+            raise Exception(f"Expecting to have built exactly 1 wheel, but found {n_wheels}")
+        elif n_wheels == 1:
+            return str(wheels[0])
+        return None
 
     def execute(self, context, args, command, log_file=None):
         if log_file is False and self.cfg.really_quiet:

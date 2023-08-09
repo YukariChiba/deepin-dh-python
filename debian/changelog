@@ -1,9 +1,45 @@
-dh-python (5.20230130-0deepin1) unstable; urgency=medium
+dh-python (6.20230803) UNRELEASED; urgency=medium
 
-  * Non-maintainer upload.
-  * Use tomllib in python3 (>> 3.11)
+  * When we build a wheel for tox, with the distutils plugin, make sure
+    our .pydistutils.cfg isn't present, so we build it in the standard layout.
+  * Remove RECORD files from dist-info, these are incompatible with
+    multi-arch.
+  * Support for backporting the pyproject plugin to Python < 3.11. Thanks
+    Stuart Prescott. (Closes: #1043301)
 
- -- Tianyu Chen <chentianyu1@uniontech.com>  Mon, 13 Mar 2023 14:49:46 +0800
+ -- Stefano Rivera <stefanor@debian.org>  Fri, 04 Aug 2023 09:49:23 +0200
+
+dh-python (6.20230802) unstable; urgency=medium
+
+  * Add pybuild plugin to build meson packages.
+  * Update pydist fallback.
+
+ -- Stefano Rivera <stefanor@debian.org>  Wed, 02 Aug 2023 11:05:40 +0200
+
+dh-python (6.20230603) experimental; urgency=medium
+
+  * Bump major version, post-bookworm.
+
+ -- Stefano Rivera <stefanor@debian.org>  Sat, 03 Jun 2023 10:50:19 -0400
+
+dh-python (5.20230510) experimental; urgency=medium
+
+  * Add support for PEP440 standards-markers in PyDist files (which superseded
+    PEP386 almost a decade ago).
+  * Add support for tox 4. Avoid needing to do an isolated build of the
+    package by using the wheel we built, ourselves. (Closes: #1035675)
+    - Packages using the distutils plugin now need python3-wheel installed.
+      Raise an error explaining that wheel is needed, if it's missing.
+    - Support all 3 potential tox configuration files. (Closes: #1033486)
+  * dh_python3: Write a "debian" INSTALLER file into dist-info directories.
+    (Closes: #1032133)
+  * Use tomllib (available since Python 3.11) instead of tomli.
+    (Closes: #1032866)
+  * Use cachy as an example dependency instead of tomli, in tests.
+  * Add pyproject.toml and pytest.ini to the default testfiles.
+    (Closes: #1031609)
+
+ -- Stefano Rivera <stefanor@debian.org>  Wed, 10 May 2023 19:26:51 -0400
 
 dh-python (5.20230130) unstable; urgency=medium
 
